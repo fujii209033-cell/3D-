@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
-    <title>PawRace 3D - スマホ対応版</title>
+    <title>PawRace 3D - スマホ対応・完全版</title>
     <style>
         * {
             box-sizing: border-box;
@@ -84,6 +84,12 @@
     <div class="touch-btn" id="btn-accel">GO</div>
 
 <script>
+    // 安全対策：万が一エラーが起きたらスマホ画面にアラートを出す
+    window.onerror = function(msg, url, line) {
+        alert("エラー発生: " + msg + "\n行番号: " + line);
+        return false;
+    };
+
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x87CEEB);
     scene.fog = new THREE.FogExp2(0x87CEEB, 0.005);
@@ -111,7 +117,7 @@
     gridHelper.position.y = 0.02;
     scene.add(gridHelper);
 
-    // 操作状態の共通管理
+    // 操作状態の管理
     const controls = { forward: false, left: false, right: false };
 
     // PCキーボード操作
@@ -143,8 +149,9 @@
     const loadingText = document.getElementById('loading-text');
 
     const loader = new THREE.GLTFLoader();
+    // パス問題を無視して、Web上のテスト用URLから強制的に読み込みます
     loader.load(
-        './assets/stylized_car.glb', 
+        'https://raw.githubusercontent.com/fml-temp/assets/main/stylized_car.glb', 
         function (gltf) {
             car = gltf.scene;
             car.scale.set(1.5, 1.5, 1.5); 
@@ -157,7 +164,7 @@
         undefined,
         function (error) {
             console.error(error);
-            loadingText.textContent = "読み込みエラーが発生しました。ファイルのパスを確認してください。";
+            loadingText.textContent = "読み込みエラーが発生しました。ネット接続を確認してください。";
         }
     );
 
@@ -214,11 +221,6 @@
         camera.updateProjectionMatrix();
         renderer.setSize(window.innerWidth, window.innerHeight);
     });
-// エラーを画面に強制表示するデバッグコード（animate(); の上に追加）
-window.onerror = function(msg, url, line) {
-    alert("エラー発生: " + msg + "\n行番号: " + line);
-    return false;
-};
 
     animate();
 </script>
