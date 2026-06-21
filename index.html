@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>PawRace 3D - 筑波サーキット風</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #87CEEB; /* 空の色 */
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+        }
+        canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+        /* 画面上のUI表示（スピードメーターなど） */
+        #ui-container {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            font-weight: bold;
+            pointer-events: none; /* クリックを透過 */
+        }
+        .ui-text {
+            font-size: 18px;
+            margin-bottom: 5px;
+        }
+        #speed-val {
+            font-size: 28px;
+            color: #FFD700; /* ゴールド */
+        }
+        /* 読み込み中画面 */
+        #loading-screen {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85);
+            color: white;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 999;
+            transition: opacity 0.5s ease;
+        }
+        .spinner {
+            width: 50px; height: 50px;
+            border: 5px solid #333;
+            border-top: 5px solid #1CAAD9;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+</head>
+<body>
+
+    <div id="loading-screen">
+        <div class="spinner"></div>
+        <div style="font-size: 20px;">ビークルを整備中...</div>
+    </div>
+
+    <div id="ui-container">
+        <div class="ui-text">SPEED: <span id="speed-val">0</span> km/h</div>
+        <div class="ui-text">STAGE: 筑波サーキット風コース</div>
+    </div>
+
+<script>
+    // --- 1. シーンとレンダラーの初期化 ---
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87CEEB); // 青空
+    scene.fog = new THREE.FogExp2(0x87CEEB, 0.005); // 遠くを自然にかすませて描画負荷を軽減
+
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // スマホの過剰な高解像度による重さを防止
+    document.body.appendChild(renderer.domElement);
+
+    // --- 2. ライト設定（描画を軽くするため影のリアルタイム計算はOFF） ---
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+    scene.add(ambientLight);
+    
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
+    dirLight.position.set(100, 200, 50);
+    scene.add(dirLight);
+
+    // --- 3. コース床面の作成（仮のアスファルト） ---
+    // 横幅500×縦幅500の広大な地面
+    const trackGeometry = new THREE.PlaneGeometry(500, 500);
+    const trackMaterial = new THREE.MeshLambertMaterial({ color: 0x3a3a3a }); // アスファルトの暗いグレー
+    const track = new THREE.Mesh(trackGeometry, trackMaterial);
+    track.rotation.x = -Math.PI / 2;
+    scene.add(track);
+
+    // グリッド（線を引いて走っているスピード感、距離感をわかりやすくする）
+    const gridHelper = new THREE.GridHelper(500, 100, 0x222222, 0x555555);
+    gridHelper.position.y = 0.02;
+    scene.add(gridHelper);
+
+    // 周りの背景（緑の芝生エリアをイメージした遠景）
+    const grassGeometry = new THREE.PlaneGeometry(2000, 2000);
+    const grassMaterial = new THREE.MeshLambertMaterial({ color: 0x2e5c1e });
+    const grass = new THREE.Mesh(grassGeometry, grassMaterial);
+    grass.rotation.x = -Math.PI / 2;
+    grass.position.y = -0.05; // 道路よりわずかに下に配置
+    scene.add(grass);
+
+    // --- 4. プレイヤーのビークル（stylized_car.glb）の読み込み ---
+    let car = null;
+    const speedEl = document.getElementById('speed-val');
+    const loadingScreen = document.getElementById('loading-screen');
+
+    const loader = new THREE.GLTFLoader();
+    // assetsフォルダ内のデータを読み込む
+    loader.load(
+        './assets/stylized_car.glb', 
+        function (gltf) {
+            car = gltf.scene;
+
+            // モデルの縮尺調整（モデルが極端に大きい・小さい場合はこの数値を調整してください）
+            car.scale.set(1.5, 1.5, 1.5); 
+            car.position.set(0, 0, 0);
+            scene.add(car);
+
+            // ローディング画面を消す
+            loadingScreen.style.opacity = 0;
+            setTimeout(() => loadingScreen.remove(), 500);
+        },
+        undefined,
+        function (error) {
+            console.error('3Dモデルの読み込みに失敗しました。パスを確認してください:', error);
+            alert('ビークルの読み込みに失敗しました。assetsフォルダ内にデータがあるか確認してください。');
+        }
+    );
+
+    // --- 5. 操作系（キーボード）の設定 ---
+    const keys = { forward: false, backward: false, left: false, right: false };
+    
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') keys.forward = true;
+        if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') keys.backward = false; // バックは速度調整のため一時無効にするか、お好みで
+        if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') keys.left = true;
+        if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') keys.right = true;
+    });
+
+    window.addEventListener('keyup', (e) => {
+        if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') keys.forward = false;
+        if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') keys.backward = false;
+        if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') keys.left = false;
+        if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') keys.right = false;
+    });
+
+    // --- 6. 車の挙動パラメータ（物理演算ライブラリを使わない軽量擬似物理） ---
+    let speed = 0;
+    const maxSpeed = 2.5;     // 最高速度
+    const accel = 0.04;       // 加速の鋭さ
+    const friction = 0.015;    // 摩擦（アクセルを離した時の減速力）
+    let carRotation = 0;      // 車の現在の向き（ラジアン）
+
+    // --- 7. メインのゲームループ（フレーム毎に実行） ---
+    function animate() {
+        requestAnimationFrame(animate);
+
+        if (car) {
+            // アクセル処理
+            if (keys.forward) {
+                speed += accel;
+                if (speed > maxSpeed) speed = maxSpeed;
+            } else {
+                // 摩擦による自然減速
+                if (speed > 0) speed = Math.max(0, speed - friction);
+            }
+
+            // ハンドル処理（ある程度動いている時だけ曲がれる仕様）
+            if (speed > 0.05) {
+                // 速度が速いほど、曲がる感度を調整する（マリカ風マイルド化）
+                const turnSpeed = 0.035; 
+                if (keys.left) carRotation += turnSpeed;
+                if (keys.right) carRotation -= turnSpeed;
+            }
+
+            // 向き（ラジアン）をベクトルに変換して座標を動かす
+            car.position.x += speed * Math.sin(carRotation);
+            car.position.z += speed * Math.cos(carRotation);
+            car.rotation.y = carRotation;
+
+            // UIのスピードメーター更新（見栄えのために適当な係数をかけて時速っぽく表示）
+            speedEl.textContent = Math.round(speed * 60);
+
+            // カメラを車の後方に追従させる（三人称視点）
+            const cameraDistance = 15; // 車からの距離
+            const cameraHeight = 5;    // カメラの高さ
+            
+            camera.position.x = car.position.x - cameraDistance * Math.sin(carRotation);
+            camera.position.z = car.position.z - cameraDistance * Math.cos(carRotation);
+            camera.position.y = car.position.y + cameraHeight;
+            
+            // 常に車の一歩先を見るようにカメラを傾ける
+            const lookTarget = new THREE.Vector3(
+                car.position.x + Math.sin(carRotation) * 5,
+                car.position.y + 1,
+                car.position.z + Math.cos(carRotation) * 5
+            );
+            camera.lookAt(lookTarget);
+        }
+
+        renderer.render(scene, camera);
+    }
+
+    // 画面サイズが変更されたら追従する（スマホの画面回転対策）
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // ループ処理の開始
+    animate();
+</script>
+</body>
+</html>
