@@ -214,6 +214,11 @@
         camera.updateProjectionMatrix();
         renderer.setSize(window.innerWidth, window.innerHeight);
     });
+// エラーを画面に強制表示するデバッグコード（animate(); の上に追加）
+window.onerror = function(msg, url, line) {
+    alert("エラー発生: " + msg + "\n行番号: " + line);
+    return false;
+};
 
     animate();
 </script>
