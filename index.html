@@ -3,19 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
-    <title>PawRace 3D - スマホ対応・完全版</title>
+    <title>PawRace 3D</title>
     <style>
         * {
             box-sizing: border-box;
             user-select: none;
             -webkit-user-select: none;
         }
-        body {
+        body, html {
             margin: 0; padding: 0; overflow: hidden;
+            width: 100%; height: 100%;
             background-color: #87CEEB;
-            font-family: 'Helvetica Neue', Arial, sans-serif;
+            font-family: Arial, sans-serif;
         }
-        canvas { display: block; width: 100vw; height: 100vh; }
+        canvas { display: block; width: 100%; height: 100%; }
 
         /* UI表示 */
         #ui-container {
@@ -23,50 +24,40 @@
             color: white; text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
             font-weight: bold; pointer-events: none; z-index: 10;
         }
-        .ui-text { font-size: 16px; margin-bottom: 5px; }
         #speed-val { font-size: 24px; color: #FFD700; }
 
-        /* --- スマホ用操作ボタンの配置 --- */
+        /* スマホ用ボタン */
         .touch-btn {
             position: absolute;
-            background: rgba(255, 255, 255, 0.25);
-            border: 3px solid rgba(255, 255, 255, 0.6);
+            background: rgba(255, 255, 255, 0.3);
+            border: 3px solid rgba(255, 255, 255, 0.7);
             border-radius: 50%;
-            color: white; font-size: 24px; font-weight: bold;
+            color: white; font-size: 28px; font-weight: bold;
             display: flex; justify-content: center; align-items: center;
-            width: 75px; height: 75px;
-            text-shadow: 1px 1px 3px rgba(0,0,0,0.6);
-            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            width: 80px; height: 80px;
             z-index: 20;
-            touch-action: none; /* スマホ特有のズーム等の挙動を防止 */
+            touch-action: none;
         }
-        .touch-btn:active {
-            background: rgba(255, 255, 255, 0.6);
-            color: #333;
-        }
-        /* 左手側：ハンドル */
+        .touch-btn:active { background: rgba(255, 255, 255, 0.7); color: #333; }
         #btn-left { bottom: 40px; left: 30px; }
-        #btn-right { bottom: 40px; left: 125px; }
-        /* 右手側：アクセル */
-        #btn-accel { bottom: 40px; right: 40px; width: 85px; height: 85px; background: rgba(0, 200, 0, 0.3); border-color: rgba(0, 255, 0, 0.6); }
+        #btn-right { bottom: 40px; left: 130px; }
+        #btn-accel { bottom: 40px; right: 40px; width: 90px; height: 90px; background: rgba(0, 200, 0, 0.4); border-color: rgba(0, 255, 0, 0.7); }
 
-        /* 読み込み中画面 */
+        /* ローディング画面 */
         #loading-screen {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.9); color: white;
+            background: #222; color: white;
             display: flex; flex-direction: column; justify-content: center; align-items: center;
-            z-index: 999; transition: opacity 0.4s ease;
+            z-index: 999;
         }
         .spinner {
-            width: 45px; height: 45px;
-            border: 5px solid #333; border-top: 5px solid #1CAAD9;
+            width: 50px; height: 50px;
+            border: 5px solid #555; border-top: 5px solid #1CAAD9;
             border-radius: 50%; animation: spin 1s linear infinite;
-            margin-bottom: 15px;
+            margin-bottom: 20px;
         }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 </head>
 <body>
 
@@ -76,153 +67,91 @@
     </div>
 
     <div id="ui-container">
-        <div class="ui-text">SPEED: <span id="speed-val">0</span> km/h</div>
+        <div>SPEED: <span id="speed-val">0</span> km/h</div>
     </div>
 
     <div class="touch-btn" id="btn-left">←</div>
     <div class="touch-btn" id="btn-right">→</div>
     <div class="touch-btn" id="btn-accel">GO</div>
 
-<script>
-    // 安全対策：万が一エラーが起きたらスマホ画面にアラートを出す
-    window.onerror = function(msg, url, line) {
-        alert("エラー発生: " + msg + "\n行番号: " + line);
-        return false;
-    };
-
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x87CEEB);
-    scene.fog = new THREE.FogExp2(0x87CEEB, 0.005);
-
-    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    document.body.appendChild(renderer.domElement);
-
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
-    scene.add(ambientLight);
-    const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
-    dirLight.position.set(100, 200, 50);
-    scene.add(dirLight);
-
-    // 地面
-    const trackGeometry = new THREE.PlaneGeometry(500, 500);
-    const trackMaterial = new THREE.MeshLambertMaterial({ color: 0x3a3a3a });
-    const track = new THREE.Mesh(trackGeometry, trackMaterial);
-    track.rotation.x = -Math.PI / 2;
-    scene.add(track);
-
-    const gridHelper = new THREE.GridHelper(500, 100, 0x222222, 0x555555);
-    gridHelper.position.y = 0.02;
-    scene.add(gridHelper);
-
-    // 操作状態の管理
-    const controls = { forward: false, left: false, right: false };
-
-    // PCキーボード操作
-    window.addEventListener('keydown', (e) => {
-        if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') controls.forward = true;
-        if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') controls.left = true;
-        if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') controls.right = true;
-    });
-    window.addEventListener('keyup', (e) => {
-        if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') controls.forward = false;
-        if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') controls.left = false;
-        if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') controls.right = false;
-    });
-
-    // スマホタッチ操作の登録
-    function setupTouchBtn(id, property) {
-        const btn = document.getElementById(id);
-        btn.addEventListener('touchstart', (e) => { e.preventDefault(); controls[property] = true; });
-        btn.addEventListener('touchend', (e) => { e.preventDefault(); controls[property] = false; });
-    }
-    setupTouchBtn('btn-left', 'left');
-    setupTouchBtn('btn-right', 'right');
-    setupTouchBtn('btn-accel', 'forward');
-
-    // 3Dモデル読み込み
-    let car = null;
-    const speedEl = document.getElementById('speed-val');
-    const loadingScreen = document.getElementById('loading-screen');
-    const loadingText = document.getElementById('loading-text');
-
-    const loader = new THREE.GLTFLoader();
-    // パス問題を無視して、Web上のテスト用URLから強制的に読み込みます
-    loader.load(
-        'https://raw.githubusercontent.com/fml-temp/assets/main/stylized_car.glb', 
-        function (gltf) {
-            car = gltf.scene;
-            car.scale.set(1.5, 1.5, 1.5); 
-            car.position.set(0, 0, 0);
-            scene.add(car);
-
-            loadingScreen.style.opacity = 0;
-            setTimeout(() => loadingScreen.remove(), 400);
-        },
-        undefined,
-        function (error) {
-            console.error(error);
-            loadingText.textContent = "読み込みエラーが発生しました。ネット接続を確認してください。";
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
         }
-    );
+      }
+    </script>
 
-    // 車の物理挙動
-    let speed = 0;
-    const maxSpeed = 2.0;
-    const accel = 0.04;
-    const friction = 0.015;
-    let carRotation = 0;
+    <script type="module">
+        import * as THREE from 'three';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-    function animate() {
-        requestAnimationFrame(animate);
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87CEEB);
+        scene.fog = new THREE.FogExp2(0x87CEEB, 0.005);
 
-        if (car) {
-            if (controls.forward) {
-                speed += accel;
-                if (speed > maxSpeed) speed = maxSpeed;
-            } else {
-                if (speed > 0) speed = Math.max(0, speed - friction);
-            }
-
-            if (speed > 0.05) {
-                const turnSpeed = 0.035; 
-                if (controls.left) carRotation += turnSpeed;
-                if (controls.right) carRotation -= turnSpeed;
-            }
-
-            car.position.x += speed * Math.sin(carRotation);
-            car.position.z += speed * Math.cos(carRotation);
-            car.rotation.y = carRotation;
-
-            speedEl.textContent = Math.round(speed * 60);
-
-            // カメラ追従
-            const cameraDistance = 12;
-            const cameraHeight = 4.5;
-            camera.position.x = car.position.x - cameraDistance * Math.sin(carRotation);
-            camera.position.z = car.position.z - cameraDistance * Math.cos(carRotation);
-            camera.position.y = car.position.y + cameraHeight;
-            
-            const lookTarget = new THREE.Vector3(
-                car.position.x + Math.sin(carRotation) * 5,
-                car.position.y + 0.8,
-                car.position.z + Math.cos(carRotation) * 5
-            );
-            camera.lookAt(lookTarget);
-        }
-
-        renderer.render(scene, camera);
-    }
-
-    window.addEventListener('resize', () => {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
-    });
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        document.body.appendChild(renderer.domElement);
 
-    animate();
-</script>
-</body>
-</html>
+        const ambientLight = new THREE.AmbientLight(0xffffff, 1.0);
+        scene.add(ambientLight);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(100, 200, 50);
+        scene.add(dirLight);
+
+        // 地面
+        const trackGeometry = new THREE.PlaneGeometry(500, 500);
+        const trackMaterial = new THREE.MeshLambertMaterial({ color: 0x444444 });
+        const track = new THREE.Mesh(trackGeometry, trackMaterial);
+        track.rotation.x = -Math.PI / 2;
+        scene.add(track);
+
+        const gridHelper = new THREE.GridHelper(500, 100, 0x222222, 0x666666);
+        gridHelper.position.y = 0.01;
+        scene.add(gridHelper);
+
+        // 操作の管理
+        const controls = { forward: false, left: false, right: false };
+
+        // PCキーボード
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') controls.forward = true;
+            if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') controls.left = true;
+            if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') controls.right = true;
+        });
+        window.addEventListener('keyup', (e) => {
+            if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') controls.forward = false;
+            if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') controls.left = false;
+            if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') controls.right = false;
+        });
+
+        // スマホタッチ
+        function setupTouch(id, prop) {
+            const el = document.getElementById(id);
+            if(el) {
+                el.addEventListener('touchstart', (e) => { e.preventDefault(); controls[prop] = true; }, {passive: false});
+                el.addEventListener('touchend', (e) => { e.preventDefault(); controls[prop] = false; }, {passive: false});
+            }
+        }
+        setupTouch('btn-left', 'left');
+        setupTouch('btn-right', 'right');
+        setupTouch('btn-accel', 'forward');
+
+        let car = null;
+        const speedEl = document.getElementById('speed-val');
+        const loadingScreen = document.getElementById('loading-screen');
+        const loadingText = document.getElementById('loading-text');
+
+        // モデルの読み込み（あなた自身のリポジトリ内から確実に読み込む設定に戻しました）
+        const loader = new GLTFLoader();
+        loader.load(
+            './assets/stylized_car.glb', 
+            function (gltf) {
+                car = gltf.scene;
+                car.scale.set(1.5, 1.5, 1.5); 
+                car.position.set(0, 0, 0);
+                scene.add(
